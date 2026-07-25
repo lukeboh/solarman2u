@@ -105,6 +105,61 @@ def refresh_tokens(config: Config, refresh_token: str) -> TokenSet:
     )
 
 
+class SliderCaptchaRequired(LoginError):
+    pass
+
+
+def http_password_login(config: Config) -> TokenSet:
+    """Tenta logar via HTTP puro, sem browser.
+
+    Payload (`grant_type=mdc_password`, `clear_text_pwd`, `identity_type`)
+    reverse-engineered de um chunk JS lazy-loaded do app (não documentado
+    oficialmente). Na prática a Solarman costuma exigir um captcha de slider
+    (`AUTH_SLIDE_ERROR`) antes de aceitar o login, o que barra esse caminho —
+    nesse caso, use browser_login/interactive_browser_login.
+    """
+    if not config.has_credentials:
+        raise LoginError("SOLARMAN_USERNAME/SOLARMAN_PASSWORD não configurados no .env.")
+
+    identity_type = 2 if "@" in config.username else 3
+
+    with httpx.Client(base_url=config.base_url, timeout=20) as client:
+        response = client.post(
+            TOKEN_ENDPOINT,
+            data={
+                "grant_type": "mdc_password",
+                "username": config.username,
+                "clear_text_pwd": config.password,
+                "identity_type": identity_type,
+                "client_id": OAUTH_CLIENT_ID,
+                "system": "SOLARMAN",
+                "area": "",
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+
+    if response.status_code != 200:
+        body = response.text[:300]
+        if "SLIDE" in body.upper():
+            raise SliderCaptchaRequired(
+                "O login exige resolver um captcha de slider (AUTH_SLIDE_ERROR); "
+                "não dá para completar via HTTP puro. Rode scripts/login_browser.py "
+                "em uma máquina com acesso normal à internet para logar manualmente "
+                "uma vez."
+            )
+        raise LoginError(f"Falha no login HTTP (HTTP {response.status_code}): {body}")
+
+    data = response.json()
+    if "access_token" not in data:
+        raise LoginError(f"Resposta inesperada no login HTTP: {data}")
+    logger.info("Login via HTTP puro concluído com sucesso.")
+    return TokenSet(
+        access_token=data["access_token"],
+        refresh_token=data["refresh_token"],
+        expires_in=data.get("expires_in"),
+    )
+
+
 def browser_login(config: Config, headless: bool = True, timeout_seconds: int = 60) -> TokenSet:
     """Realiza login preenchendo usuário/senha em um browser real (Playwright).
 
@@ -269,6 +324,16 @@ def get_valid_tokens(config: Config) -> TokenSet:
             return tokens
         except LoginError as exc:
             logger.warning("Refresh falhou (%s), tentando login completo.", exc)
+
+    try:
+        logger.info("Tentando login via HTTP puro (sem browser)...")
+        tokens = http_password_login(config)
+        save_tokens(tokens)
+        return tokens
+    except SliderCaptchaRequired as exc:
+        logger.warning("%s", exc)
+    except LoginError as exc:
+        logger.warning("Login HTTP falhou (%s), tentando via browser.", exc)
 
     logger.info("Realizando login completo via browser...")
     tokens = browser_login(config, headless=True)
