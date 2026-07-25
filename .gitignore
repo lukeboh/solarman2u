@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# credenciais e sessão nunca versionadas
+.env
+.secrets/
+data/*.json
+data/*.log
+!data/.gitkeep
+!.secrets/.gitkeep
