@@ -17,6 +17,14 @@ LOG_FILE_PATH = DATA_DIR / "solarman_alerts.log"
 load_dotenv(ROOT_DIR / ".env")
 
 
+def _env(name: str, default: str) -> str:
+    # No GitHub Actions, uma env var referenciando uma variable/secret
+    # inexistente ainda chega como string vazia (não None) — trata como
+    # "não configurado" para não quebrar os defaults.
+    value = os.getenv(name)
+    return default if value is None or value == "" else value
+
+
 def _bool(value: str | None, default: bool) -> bool:
     if value is None or value == "":
         return default
@@ -62,23 +70,23 @@ class Config:
 
 
 def load_config() -> Config:
-    tz_name = os.getenv("LOCAL_TIMEZONE", "UTC")
+    tz_name = _env("LOCAL_TIMEZONE", "UTC")
     return Config(
-        username=os.getenv("SOLARMAN_USERNAME", ""),
-        password=os.getenv("SOLARMAN_PASSWORD", ""),
-        base_url=os.getenv("SOLARMAN_BASE_URL", "https://home.solarmanpv.com").rstrip("/"),
+        username=_env("SOLARMAN_USERNAME", ""),
+        password=_env("SOLARMAN_PASSWORD", ""),
+        base_url=_env("SOLARMAN_BASE_URL", "https://home.solarmanpv.com").rstrip("/"),
         station_ids=_list(os.getenv("SOLARMAN_STATION_IDS")),
-        bootstrap_refresh_token=os.getenv("SOLARMAN_REFRESH_TOKEN", ""),
-        start_threshold_w=float(os.getenv("PRODUCTION_START_THRESHOLD_W", "20")),
-        end_threshold_w=float(os.getenv("PRODUCTION_END_THRESHOLD_W", "5")),
-        end_confirmations=int(os.getenv("PRODUCTION_END_CONFIRMATIONS", "3")),
-        end_not_before=os.getenv("PRODUCTION_END_NOT_BEFORE", "10:00"),
-        smtp_host=os.getenv("SMTP_HOST", ""),
-        smtp_port=int(os.getenv("SMTP_PORT", "587")),
-        smtp_username=os.getenv("SMTP_USERNAME", ""),
-        smtp_password=os.getenv("SMTP_PASSWORD", ""),
+        bootstrap_refresh_token=_env("SOLARMAN_REFRESH_TOKEN", ""),
+        start_threshold_w=float(_env("PRODUCTION_START_THRESHOLD_W", "20")),
+        end_threshold_w=float(_env("PRODUCTION_END_THRESHOLD_W", "5")),
+        end_confirmations=int(_env("PRODUCTION_END_CONFIRMATIONS", "3")),
+        end_not_before=_env("PRODUCTION_END_NOT_BEFORE", "10:00"),
+        smtp_host=_env("SMTP_HOST", ""),
+        smtp_port=int(_env("SMTP_PORT", "587")),
+        smtp_username=_env("SMTP_USERNAME", ""),
+        smtp_password=_env("SMTP_PASSWORD", ""),
         smtp_use_tls=_bool(os.getenv("SMTP_USE_TLS"), True),
-        email_from=os.getenv("ALERT_EMAIL_FROM", ""),
+        email_from=_env("ALERT_EMAIL_FROM", ""),
         email_to=_list(os.getenv("ALERT_EMAIL_TO")),
         timezone=ZoneInfo(tz_name),
     )
