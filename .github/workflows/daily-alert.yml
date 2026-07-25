@@ -1,0 +1,57 @@
+name: Alerta diario de producao solar
+
+on:
+  schedule:
+    # a cada 10 minutos, das 08:00 as 23:00 UTC (ajuste conforme seu fuso)
+    - cron: "*/10 8-23 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: solarman-check
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Verificar producao e enviar alertas
+        env:
+          SOLARMAN_REFRESH_TOKEN: ${{ secrets.SOLARMAN_REFRESH_TOKEN }}
+          SOLARMAN_BASE_URL: ${{ vars.SOLARMAN_BASE_URL }}
+          SOLARMAN_STATION_IDS: ${{ vars.SOLARMAN_STATION_IDS }}
+          PRODUCTION_START_THRESHOLD_W: ${{ vars.PRODUCTION_START_THRESHOLD_W }}
+          PRODUCTION_END_THRESHOLD_W: ${{ vars.PRODUCTION_END_THRESHOLD_W }}
+          PRODUCTION_END_CONFIRMATIONS: ${{ vars.PRODUCTION_END_CONFIRMATIONS }}
+          PRODUCTION_END_NOT_BEFORE: ${{ vars.PRODUCTION_END_NOT_BEFORE }}
+          LOCAL_TIMEZONE: ${{ vars.LOCAL_TIMEZONE }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ vars.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_USE_TLS: ${{ vars.SMTP_USE_TLS }}
+          ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }}
+          ALERT_EMAIL_TO: ${{ vars.ALERT_EMAIL_TO }}
+        run: python scripts/check_production.py
+
+      - name: Persistir estado do dia (data/state.json)
+        run: |
+          git add -f data/state.json
+          if [ -n "$(git status --porcelain -- data/state.json)" ]; then
+            git config user.name "solarman2u-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git commit -m "chore: atualiza estado diario de geracao [skip ci]"
+            git push
+          else
+            echo "Sem mudancas em data/state.json"
+          fi

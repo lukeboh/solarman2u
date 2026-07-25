@@ -313,6 +313,19 @@ def get_valid_tokens(config: Config) -> TokenSet:
     """Retorna um TokenSet válido, renovando ou logando de novo conforme necessário."""
     tokens = load_saved_tokens()
 
+    if tokens is None and config.bootstrap_refresh_token:
+        # Ambiente sem estado local (ex.: runner novo do GitHub Actions a cada
+        # execução): usa o refresh_token guardado como secret para obter um
+        # access_token, sem precisar de login/browser.
+        logger.info("Nenhuma sessão local salva; usando SOLARMAN_REFRESH_TOKEN.")
+        # obtained_at no passado força is_expired()==True e cai direto no
+        # fluxo de refresh_token abaixo.
+        tokens = TokenSet(
+            access_token="",
+            refresh_token=config.bootstrap_refresh_token,
+            obtained_at=time.time() - 10_000,
+        )
+
     if tokens is not None and not tokens.is_expired():
         return tokens
 

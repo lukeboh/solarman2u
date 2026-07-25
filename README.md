@@ -24,7 +24,72 @@ WhatsApp/Telegram depois sem tocar na lógica de detecção.
    para não confundir uma nuvem passageira com o fim da geração.
 4. **Notificação**: hoje via SMTP (`solarman_alerts/notifiers/email.py`).
 
-## Setup
+## Opção A — 100% sem máquina própria (Codespaces + GitHub Actions)
+
+A Solarman exige resolver um captcha de slider no login — isso não dá pra
+automatizar sem um humano vendo a tela. A solução que não depende de você ter
+um PC disponível: usar um **GitHub Codespace** (roda na nuvem, você acessa
+tudo pelo navegador) só para o login inicial, e um **GitHub Actions agendado**
+para o monitoramento contínuo (esse não precisa mais de navegador, só de
+chamadas HTTP simples).
+
+### 1. Login inicial (uma vez, dentro de um Codespace)
+
+1. No GitHub, na branch deste projeto: **Code → Codespaces → Create codespace
+   on branch**. Espere a configuração terminar (instala dependências e o
+   Chromium do Playwright automaticamente).
+2. Uma aba aparece pedindo para abrir a porta **6080** — abra-a (ou vá em
+   "Ports" e clique para abrir no navegador). É um mini desktop remoto
+   (senha: `solarman`, definida em `.devcontainer/devcontainer.json`).
+3. No terminal normal do Codespace (não precisa ser dentro do desktop
+   remoto), rode:
+   ```bash
+   python scripts/login_browser.py
+   ```
+4. Uma janela do Chromium vai aparecer **dentro da aba do desktop remoto**
+   (porta 6080). Faça o login normalmente ali — usuário, senha, e resolva o
+   slider com o mouse. Sem copiar/colar nada nessa parte: assim que o login
+   terminar, o script detecta sozinho e salva a sessão.
+5. No terminal, confira o token gerado:
+   ```bash
+   cat data/tokens.json
+   ```
+   Copie o valor de `"refresh_token"`.
+
+### 2. Configurar o GitHub Actions (uma vez)
+
+No repositório, em **Settings → Secrets and variables → Actions**:
+
+- Em **Secrets**, crie:
+  - `SOLARMAN_REFRESH_TOKEN` = o valor copiado no passo anterior
+  - `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`
+- Em **Variables**, crie (todas opcionais, têm valor padrão razoável):
+  - `ALERT_EMAIL_FROM`, `ALERT_EMAIL_TO` (obrigatórias para o e-mail sair)
+  - `SMTP_PORT` (padrão 587), `SMTP_USE_TLS` (padrão true)
+  - `SOLARMAN_STATION_IDS`, `LOCAL_TIMEZONE`, limiares de início/fim (veja a
+    tabela mais abaixo — mesmos nomes de variável)
+
+O workflow `.github/workflows/daily-alert.yml` já está pronto: roda a cada 10
+minutos (ajuste o `cron:` conforme seu fuso) chamando
+`scripts/check_production.py`, e ele mesmo persiste o estado do dia
+(`data/state.json`) de volta no repositório.
+
+Teste sem esperar o horário: aba **Actions → Alerta diario de producao
+solar → Run workflow**.
+
+### Sobre a validade da sessão
+
+O `refresh_token` guardado no secret é reaproveitado a cada execução (sem
+precisar de browser — isso já foi validado diretamente contra o servidor da
+Solarman). Se um dia ele expirar/for revogado, o workflow vai falhar e o
+GitHub **te avisa por e-mail automaticamente** (notificação nativa de Actions
+com falha) — quando isso acontecer, repita o passo 1 num novo Codespace e
+atualize o secret.
+
+Pode apagar/parar o Codespace depois do passo 1 — ele não precisa ficar
+rodando, só o Actions.
+
+## Opção B — na sua própria máquina
 
 ```bash
 python3 -m venv .venv
@@ -95,7 +160,8 @@ disparar o alerta de início ou de fim do dia (o estado fica em
 
 | Variável | Descrição |
 |---|---|
-| `SOLARMAN_USERNAME` / `SOLARMAN_PASSWORD` | credenciais da conta Solarman |
+| `SOLARMAN_USERNAME` / `SOLARMAN_PASSWORD` | credenciais da conta Solarman (Opção B) |
+| `SOLARMAN_REFRESH_TOKEN` | usado no lugar das credenciais quando não há sessão local salva (é assim que a Opção A/GitHub Actions funciona) |
 | `SOLARMAN_STATION_IDS` | IDs das usinas a monitorar (vazio = todas) |
 | `PRODUCTION_START_THRESHOLD_W` | potência mínima para considerar "começou a gerar" |
 | `PRODUCTION_END_THRESHOLD_W` | potência abaixo da qual conta como "parou" |
@@ -114,6 +180,12 @@ disparar o alerta de início ou de fim do dia (o estado fica em
   caso use `scripts/login_browser.py`.
 - Os nomes de campo de potência (`POWER_FIELD_CANDIDATES`) são um melhor
   esforço e podem precisar de ajuste manual na primeira execução real.
+- O `refresh_token` fica só como secret do GitHub Actions, nunca commitado
+  (evita vazar credencial no histórico do git). Se a Solarman rotacionar esse
+  token a cada uso (não deu pra confirmar sem uma sessão real), o workflow
+  passa a falhar depois da primeira execução — nesse caso o próprio GitHub já
+  avisa por e-mail, e a correção é só repetir o login no Codespace e
+  atualizar o secret.
 
 ## Próximos passos sugeridos
 

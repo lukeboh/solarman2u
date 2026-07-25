@@ -35,6 +35,7 @@ class Config:
     password: str
     base_url: str
     station_ids: list[str]
+    bootstrap_refresh_token: str
 
     start_threshold_w: float
     end_threshold_w: float
@@ -67,6 +68,7 @@ def load_config() -> Config:
         password=os.getenv("SOLARMAN_PASSWORD", ""),
         base_url=os.getenv("SOLARMAN_BASE_URL", "https://home.solarmanpv.com").rstrip("/"),
         station_ids=_list(os.getenv("SOLARMAN_STATION_IDS")),
+        bootstrap_refresh_token=os.getenv("SOLARMAN_REFRESH_TOKEN", ""),
         start_threshold_w=float(os.getenv("PRODUCTION_START_THRESHOLD_W", "20")),
         end_threshold_w=float(os.getenv("PRODUCTION_END_THRESHOLD_W", "5")),
         end_confirmations=int(os.getenv("PRODUCTION_END_CONFIRMATIONS", "3")),
