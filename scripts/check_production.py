@@ -28,9 +28,18 @@ def main() -> int:
     )
 
     config = load_config()
-    if not config.has_email_configured:
-        logging.error("E-mail não configurado (.env). Veja .env.example.")
-        return 1
+
+    # Setup incompleto (ainda faltam secrets/variables) não é uma falha de
+    # execução de verdade — não deve contar como run quebrado (isso dispara
+    # e-mail de falha do GitHub Actions a cada execução agendada). Só depois
+    # que tudo estiver configurado é que um erro aqui deve "estourar" e virar
+    # o alerta de falha (ex.: sessão expirada).
+    if not config.has_email_configured or not (config.has_credentials or config.bootstrap_refresh_token):
+        logging.warning(
+            "Setup incompleto (faltam credenciais/refresh token e/ou SMTP) - "
+            "pulando esta execução sem marcar como falha. Veja README.md."
+        )
+        return 0
 
     notifier = EmailNotifier(config)
     state = AppState.load()

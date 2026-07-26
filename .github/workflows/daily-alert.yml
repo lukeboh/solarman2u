@@ -1,9 +1,13 @@
 name: Alerta diario de producao solar
 
 on:
-  schedule:
-    # a cada 10 minutos, das 08:00 as 23:00 UTC (ajuste conforme seu fuso)
-    - cron: "*/10 8-23 * * *"
+  # NOTA: o agendamento (schedule/cron) fica desativado de propósito até o
+  # setup (Codespace + secrets) estar completo — cada execução sem os
+  # secrets configurados falha e o GitHub manda e-mail de falha a cada uma.
+  # Descomente as duas linhas abaixo depois de configurar os secrets em
+  # Settings -> Secrets and variables -> Actions.
+  # schedule:
+  #   - cron: "*/10 8-23 * * *"
   workflow_dispatch: {}
 
 concurrency:
